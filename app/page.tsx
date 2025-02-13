@@ -87,6 +87,7 @@ const AudioPlayer = ({ song }: AudioPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
 
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
@@ -103,10 +104,23 @@ const AudioPlayer = ({ song }: AudioPlayerProps) => {
   const handleLoadedMetadata = () => {
     if (audioRef.current) {
       setDuration(audioRef.current.duration);
+      setIsLoading(false);
     }
   };
 
   const handlePlayPause = () => {
+    if (!audioRef.current?.src) {
+      // If no src is set, use stream_audio_url for recent songs
+      if (song.stream_audio_url) {
+        setIsLoading(true);
+        audioRef.current!.src = song.stream_audio_url;
+        audioRef.current!.load();
+        audioRef.current!.play();
+        setIsPlaying(true);
+      }
+      return;
+    }
+
     if (audioRef.current) {
       if (isPlaying) {
         audioRef.current.pause();
@@ -125,71 +139,94 @@ const AudioPlayer = ({ song }: AudioPlayerProps) => {
     }
   };
 
+  // Reset player when song changes
+  useEffect(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    if (audioRef.current) {
+      audioRef.current.src = '';
+    }
+  }, [song.id]);
+
+  const canPlay = song.status === 'SUCCESS' || song.stream_audio_url;
+
   return (
-    <div className="bg-white rounded-lg shadow-md p-4 space-y-4">
-      <div className="flex items-start space-x-4">
+    <div className="bg-white rounded-lg shadow-md overflow-hidden">
+      <div className="flex flex-col">
         {song.image_url && (
-          <div className="relative w-24 h-24 flex-shrink-0">
+          <div className="relative w-full h-48">
             <Image
               src={song.image_url}
               alt={song.title}
               fill
-              className="object-cover rounded-md"
-              sizes="96px"
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, 42rem"
+              priority
             />
           </div>
         )}
-        <div className="flex-grow">
-          <h3 className="font-medium text-lg">{song.title}</h3>
-          <p className="text-sm text-gray-600">{song.prompt}</p>
-          <p className="text-sm text-gray-500">Style: {song.style}</p>
-        </div>
-        <span className={`px-2 py-1 text-sm rounded-full ${getStatusColor(song.status)}`}>
-          {getStatusText(song.status)}
-        </span>
-      </div>
-
-      {song.status === 'SUCCESS' && song.audio_url && (
-        <div className="space-y-2">
-          <audio
-            ref={audioRef}
-            src={song.audio_url}
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
-            onEnded={() => setIsPlaying(false)}
-          />
-          
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={handlePlayPause}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600 transition-colors"
-            >
-              {isPlaying ? (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                </svg>
-              )}
-            </button>
-            
-            <div className="flex-grow flex items-center space-x-2">
-              <span className="text-sm text-gray-500 w-12">{formatTime(currentTime)}</span>
-              <input
-                type="range"
-                min="0"
-                max={duration}
-                value={currentTime}
-                onChange={handleSeek}
-                className="flex-grow h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:rounded-full"
-              />
-              <span className="text-sm text-gray-500 w-12">{formatTime(duration)}</span>
+        <div className="p-4 space-y-4">
+          <div className="flex items-start justify-between">
+            <div className="flex-grow">
+              <h3 className="font-medium text-lg">{song.title}</h3>
+              <p className="text-sm text-gray-600">{song.prompt}</p>
+              <p className="text-sm text-gray-500">Style: {song.style}</p>
             </div>
+            <span className={`px-2 py-1 text-sm rounded-full ${getStatusColor(song.status)}`}>
+              {getStatusText(song.status)}
+            </span>
           </div>
+
+          {canPlay && (
+            <div className="space-y-2">
+              <audio
+                ref={audioRef}
+                src={song.audio_url}
+                onTimeUpdate={handleTimeUpdate}
+                onLoadedMetadata={handleLoadedMetadata}
+                onEnded={() => setIsPlaying(false)}
+              />
+              
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={handlePlayPause}
+                  disabled={isLoading}
+                  className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600 transition-colors disabled:opacity-50"
+                >
+                  {isLoading ? (
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  ) : isPlaying ? (
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </button>
+                
+                <div className="flex-grow flex items-center space-x-2">
+                  <span className="text-sm text-gray-500 w-12">{formatTime(currentTime)}</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max={duration}
+                    value={currentTime}
+                    onChange={handleSeek}
+                    className="flex-grow h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:rounded-full"
+                  />
+                  <span className="text-sm text-gray-500 w-12">{formatTime(duration)}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 };
