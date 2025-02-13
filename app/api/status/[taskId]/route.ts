@@ -8,9 +8,15 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY!
 );
 
+type RouteContext = {
+  params: {
+    taskId: string;
+  };
+};
+
 export async function GET(
-  req: NextRequest,
-  { params }: { params: { taskId: string } }
+  request: NextRequest,
+  { params }: RouteContext
 ) {
   try {
     const response = await fetch(
