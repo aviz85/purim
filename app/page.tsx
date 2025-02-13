@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { supabase } from '@/utils/supabase';
 import type { Song } from '@/utils/supabase';
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 interface GenerationResult {
   code: number;
@@ -91,17 +92,22 @@ export default function Home() {
       .channel('songs_changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'songs' },
-        (payload) => {
+        {
+          event: '*',
+          schema: 'public',
+          table: 'songs',
+        },
+        (payload: RealtimePostgresChangesPayload<Song>) => {
           if (payload.new) {
+            const newSong = payload.new as Song;
             setSongs((prev) => {
-              const exists = prev.find((song) => song.id === payload.new.id);
+              const exists = prev.find((song) => song.id === newSong.id);
               if (exists) {
                 return prev.map((song) =>
-                  song.id === payload.new.id ? payload.new : song
+                  song.id === newSong.id ? newSong : song
                 );
               }
-              return [payload.new, ...prev].slice(0, 10);
+              return [newSong, ...prev].slice(0, 10);
             });
           }
         }

@@ -8,19 +8,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY!
 );
 
-interface RouteSegmentConfig {
-  params: {
-    taskId: string;
-  };
-}
+export async function GET(request: NextRequest): Promise<Response> {
+  const taskId = request.nextUrl.pathname.split('/').pop();
 
-export async function GET(
-  request: NextRequest,
-  { params }: RouteSegmentConfig
-): Promise<Response> {
+  if (!taskId) {
+    return Response.json({ error: 'Task ID is required' }, { status: 400 });
+  }
+
   try {
     const response = await fetch(
-      `https://apibox.erweima.ai/api/v1/generate/record-info?taskId=${params.taskId}`,
+      `https://apibox.erweima.ai/api/v1/generate/record-info?taskId=${taskId}`,
       {
         headers: {
           Authorization: `Bearer ${process.env.ERWEIMA_API_KEY}`,
@@ -45,7 +42,7 @@ export async function GET(
           stream_audio_url: data.data.response.sunoData[0].stream_audio_url,
           image_url: data.data.response.sunoData[0].image_url,
         }),
-      }).eq('task_id', params.taskId);
+      }).eq('task_id', taskId);
     }
 
     return Response.json(data);
