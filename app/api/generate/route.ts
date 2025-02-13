@@ -1,6 +1,12 @@
 import { NextRequest } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'edge';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
+);
 
 export async function POST(req: NextRequest) {
   try {
@@ -29,6 +35,17 @@ export async function POST(req: NextRequest) {
     if (!response.ok) {
       throw new Error(data.msg || 'Failed to generate audio');
     }
+
+    // Store initial song data in Supabase
+    await supabase.from('songs').insert({
+      task_id: data.data.taskId,
+      prompt,
+      style,
+      title,
+      status: 'PENDING',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
 
     return Response.json(data);
   } catch (error) {
