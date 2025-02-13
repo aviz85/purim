@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { supabase } from '@/utils/supabase';
 import type { Song } from '@/utils/supabase';
@@ -20,6 +20,22 @@ interface StatusResponse {
     };
   };
 }
+
+interface ProgressLog {
+  status: Song['status'];
+  timestamp: number;
+}
+
+const PROGRESS_STEPS = {
+  'PENDING': 0,
+  'TEXT_SUCCESS': 33,
+  'FIRST_SUCCESS': 66,
+  'SUCCESS': 100,
+  'CREATE_TASK_FAILED': 100,
+  'GENERATE_AUDIO_FAILED': 100,
+  'CALLBACK_EXCEPTION': 100,
+  'SENSITIVE_WORD_ERROR': 100,
+} as const;
 
 const getStatusColor = (status: Song['status']) => {
   switch (status) {
@@ -62,10 +78,128 @@ const getStatusText = (status: Song['status']) => {
   }
 };
 
+interface AudioPlayerProps {
+  song: Song;
+}
+
+const AudioPlayer = ({ song }: AudioPlayerProps) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setDuration(audioRef.current.duration);
+    }
+  };
+
+  const handlePlayPause = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = Number(e.target.value);
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+      setCurrentTime(time);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-md p-4 space-y-4">
+      <div className="flex items-start space-x-4">
+        {song.image_url && (
+          <div className="relative w-24 h-24 flex-shrink-0">
+            <Image
+              src={song.image_url}
+              alt={song.title}
+              fill
+              className="object-cover rounded-md"
+              sizes="96px"
+            />
+          </div>
+        )}
+        <div className="flex-grow">
+          <h3 className="font-medium text-lg">{song.title}</h3>
+          <p className="text-sm text-gray-600">{song.prompt}</p>
+          <p className="text-sm text-gray-500">Style: {song.style}</p>
+        </div>
+        <span className={`px-2 py-1 text-sm rounded-full ${getStatusColor(song.status)}`}>
+          {getStatusText(song.status)}
+        </span>
+      </div>
+
+      {song.status === 'SUCCESS' && song.audio_url && (
+        <div className="space-y-2">
+          <audio
+            ref={audioRef}
+            src={song.audio_url}
+            onTimeUpdate={handleTimeUpdate}
+            onLoadedMetadata={handleLoadedMetadata}
+            onEnded={() => setIsPlaying(false)}
+          />
+          
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={handlePlayPause}
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+            >
+              {isPlaying ? (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                </svg>
+              )}
+            </button>
+            
+            <div className="flex-grow flex items-center space-x-2">
+              <span className="text-sm text-gray-500 w-12">{formatTime(currentTime)}</span>
+              <input
+                type="range"
+                min="0"
+                max={duration}
+                value={currentTime}
+                onChange={handleSeek}
+                className="flex-grow h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:rounded-full"
+              />
+              <span className="text-sm text-gray-500 w-12">{formatTime(duration)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
+  const [progressLogs, setProgressLogs] = useState<ProgressLog[]>([]);
+  const [currentProgress, setCurrentProgress] = useState(0);
 
   useEffect(() => {
     const fetchSongs = async () => {
@@ -116,8 +250,21 @@ export default function Home() {
       const response = await fetch(`/api/status/${taskId}`);
       const data: StatusResponse = await response.json();
 
-      if (data.code === 200 && data.data.status === 'SUCCESS') {
-        return true;
+      if (data.code === 200) {
+        const status = data.data.status;
+        setCurrentProgress(PROGRESS_STEPS[status] || 0);
+        
+        setProgressLogs(prev => {
+          const lastLog = prev[prev.length - 1];
+          if (!lastLog || lastLog.status !== status) {
+            return [...prev, { status, timestamp: Date.now() }];
+          }
+          return prev;
+        });
+
+        if (status === 'SUCCESS') {
+          return true;
+        }
       }
       return false;
     } catch (error) {
@@ -128,8 +275,8 @@ export default function Home() {
 
   const pollStatus = async (taskId: string) => {
     let attempts = 0;
-    const maxAttempts = 30; // 5 minutes with 10-second intervals
-    const interval = 10000; // 10 seconds
+    const maxAttempts = 300; // 5 minutes with 1-second intervals
+    const interval = 1000; // 1 second
 
     const poll = async () => {
       if (attempts >= maxAttempts) {
@@ -153,6 +300,8 @@ export default function Home() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setProgressLogs([]);
+    setCurrentProgress(0);
     
     const form = e.target as HTMLFormElement;
     const formData = new FormData(form);
@@ -243,42 +392,42 @@ export default function Home() {
           </div>
         )}
 
+        {loading && (
+          <div className="space-y-4 p-4 bg-gray-50 rounded-md">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="font-medium">Generation Progress</span>
+                <span>{currentProgress}%</span>
+              </div>
+              <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-blue-500 transition-all duration-500 ease-out rounded-full"
+                  style={{ width: `${currentProgress}%` }}
+                />
+              </div>
+            </div>
+
+            {progressLogs.length > 0 && (
+              <div className="space-y-1 mt-4">
+                {progressLogs.map((log, index) => (
+                  <div key={index} className="flex items-center text-sm">
+                    <span className={`w-2 h-2 rounded-full mr-2 ${getStatusColor(log.status)}`} />
+                    <span>{getStatusText(log.status)}</span>
+                    <span className="text-gray-400 ml-2">
+                      {new Date(log.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {songs.length > 0 && (
           <div className="space-y-4">
             <h2 className="text-xl font-semibold">Recent Songs</h2>
             {songs.map((song) => (
-              <div
-                key={song.id}
-                className="p-4 border rounded-md space-y-2"
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-medium">{song.title}</h3>
-                    <p className="text-sm text-gray-600">{song.prompt}</p>
-                    <p className="text-sm text-gray-500">Style: {song.style}</p>
-                  </div>
-                  <span className={`px-2 py-1 text-sm rounded-full ${getStatusColor(song.status)}`}>
-                    {getStatusText(song.status)}
-                  </span>
-                </div>
-                {song.status === 'SUCCESS' && song.audio_url && (
-                  <audio controls className="w-full">
-                    <source src={song.audio_url} type="audio/mpeg" />
-                    Your browser does not support the audio element.
-                  </audio>
-                )}
-                {song.status === 'SUCCESS' && song.image_url && (
-                  <div className="relative w-full h-40">
-                    <Image
-                      src={song.image_url}
-                      alt={song.title}
-                      fill
-                      className="object-cover rounded-md"
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                    />
-                  </div>
-                )}
-              </div>
+              <AudioPlayer key={song.id} song={song} />
             ))}
           </div>
         )}
