@@ -71,7 +71,6 @@ const getStatusText = (status: Song['status']) => {
 
 export default function Home() {
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<GenerationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
 
