@@ -6,14 +6,6 @@ import { supabase } from '@/utils/supabase';
 import type { Song } from '@/utils/supabase';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
-interface GenerationResult {
-  code: number;
-  msg: string;
-  data: {
-    taskId: string;
-  };
-}
-
 interface StatusResponse {
   code: number;
   msg: string;
