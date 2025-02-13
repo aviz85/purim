@@ -38,9 +38,9 @@ export async function GET(request: NextRequest): Promise<Response> {
         status: data.data.status,
         updated_at: new Date().toISOString(),
         ...(data.data.response?.sunoData?.[0] && {
-          audio_url: data.data.response.sunoData[0].audio_url,
-          stream_audio_url: data.data.response.sunoData[0].stream_audio_url,
-          image_url: data.data.response.sunoData[0].image_url,
+          audio_url: data.data.response.sunoData[0].audioUrl,
+          stream_audio_url: data.data.response.sunoData[0].streamAudioUrl,
+          image_url: data.data.response.sunoData[0].imageUrl,
         }),
       }).eq('task_id', taskId);
     }

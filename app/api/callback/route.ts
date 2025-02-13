@@ -18,9 +18,9 @@ export async function POST(req: NextRequest) {
       await supabase.from('songs').upsert({
         task_id,
         status: 'SUCCESS',
-        audio_url: songData.audio_url,
-        stream_audio_url: songData.stream_audio_url,
-        image_url: songData.image_url,
+        audio_url: songData.audioUrl,
+        stream_audio_url: songData.streamAudioUrl,
+        image_url: songData.imageUrl,
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'task_id'

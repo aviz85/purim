@@ -110,12 +110,16 @@ const AudioPlayer = ({ song }: AudioPlayerProps) => {
 
   const handlePlayPause = () => {
     if (!audioRef.current?.src) {
-      // If no src is set, use stream_audio_url for recent songs
-      if (song.stream_audio_url) {
+      // If no src is set, try audio_url first, then fall back to stream_audio_url
+      const audioSource = song.audio_url || song.stream_audio_url;
+      if (audioSource) {
         setIsLoading(true);
-        audioRef.current!.src = song.stream_audio_url;
+        audioRef.current!.src = audioSource;
         audioRef.current!.load();
-        audioRef.current!.play();
+        audioRef.current!.play().catch(error => {
+          console.error('Error playing audio:', error);
+          setIsLoading(false);
+        });
         setIsPlaying(true);
       }
       return;
@@ -125,7 +129,7 @@ const AudioPlayer = ({ song }: AudioPlayerProps) => {
       if (isPlaying) {
         audioRef.current.pause();
       } else {
-        audioRef.current.play();
+        audioRef.current.play().catch(console.error);
       }
       setIsPlaying(!isPlaying);
     }
@@ -154,7 +158,7 @@ const AudioPlayer = ({ song }: AudioPlayerProps) => {
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
       <div className="flex flex-col">
-        {song.image_url && (
+        {song.image_url ? (
           <div className="relative w-full h-48">
             <Image
               src={song.image_url}
@@ -164,6 +168,12 @@ const AudioPlayer = ({ song }: AudioPlayerProps) => {
               sizes="(max-width: 768px) 100vw, 42rem"
               priority
             />
+          </div>
+        ) : (
+          <div className="w-full h-48 bg-gray-100 flex items-center justify-center">
+            <svg className="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+            </svg>
           </div>
         )}
         <div className="p-4 space-y-4">
@@ -182,10 +192,13 @@ const AudioPlayer = ({ song }: AudioPlayerProps) => {
             <div className="space-y-2">
               <audio
                 ref={audioRef}
-                src={song.audio_url}
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}
                 onEnded={() => setIsPlaying(false)}
+                onError={(e) => {
+                  console.error('Audio error:', e);
+                  setIsLoading(false);
+                }}
               />
               
               <div className="flex items-center space-x-4">
