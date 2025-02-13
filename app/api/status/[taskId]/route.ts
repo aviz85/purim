@@ -8,16 +8,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY!
 );
 
-type RouteContext = {
+interface RouteSegmentConfig {
   params: {
     taskId: string;
   };
-};
+}
 
 export async function GET(
   request: NextRequest,
-  { params }: RouteContext
-) {
+  { params }: RouteSegmentConfig
+): Promise<Response> {
   try {
     const response = await fetch(
       `https://apibox.erweima.ai/api/v1/generate/record-info?taskId=${params.taskId}`,
